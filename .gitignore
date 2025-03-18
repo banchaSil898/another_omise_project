@@ -32,6 +32,7 @@ tests/_support/_generated
 /config/db.local.php
 node_modules/
 uploads/*
+web/uploads/*
 .env
 logs/
 *.log
