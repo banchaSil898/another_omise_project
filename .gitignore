@@ -30,8 +30,8 @@ tests/_output/*
 tests/_support/_generated
 /config/params.local.php
 /config/db.local.php
-node_modules\
-uploads\transfer\
+node_modules/
+uploads/transfer/
 .env
 logs/
 *.log
