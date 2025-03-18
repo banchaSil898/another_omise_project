@@ -35,6 +35,7 @@ $user = Yii::$app->user->identity;
                 ],
     ]);
     ?>
+    <script type="text/javascript" src="https://cdn.omise.co/omise.js"></script>
     <div class="checkout page">
         <div class="container">
             <div class="row">
@@ -141,6 +142,8 @@ $user = Yii::$app->user->identity;
                     </div>
                     <?php Page::end(); ?>
                 </div>
+                <input type="hidden" name="omiseToken"/>
+                <input type="hidden" name="omiseSource"/>
 
             </div>
         </div>
@@ -156,6 +159,42 @@ $giftRememberUrl = Url::to(['cart/gift-remember']);
 ?>
 <?php JSRegister::begin(); ?>
 <script>
+    OmiseCard.configure({
+      publicKey: '<?= Yii::$app->params['omisePublicKey']?>'
+    });
+    $(document).ready(function(){
+      $('#frm-cart').on('beforeSubmit', function(event, fields){
+        const payment_method_id = $('input[name="Purchase[payment_method]"]:checked').val();
+        if(payment_method_id == 1){
+          event.preventDefault();
+          let grandTotal = parseFloat($('#grandtotal').html().replace(/,/g, '')) ?? 0;
+          // เปิด Omise Modal เพื่อให้ลูกค้าทำการกรอกข้อมูลการชำระเงิน
+          OmiseCard.open({
+            amount: grandTotal * 100,  // จำนวนเงินในหน่วยสตางค์
+            currency: "THB",  // สกุลเงินเป็นบาท
+            defaultPaymentMethod: 'credit_card',
+            onCreateTokenSuccess: function (nonce) {
+              // เมื่อ Omise สร้าง token สำเร็จ ให้ใส่ token ลงในฟอร์ม
+              if (nonce.startsWith("tokn_")) {
+                $('[name=omiseToken]').val(nonce);
+              } else {
+                $('[name=omiseSource]').val(nonce);
+              }
+              // ทำการ submit ฟอร์มใหม่หลังจากได้รับ token
+              $('#frm-cart').off('beforeSubmit')
+              $('#frm-cart').submit();
+            },
+            onFormClosed: function () {
+              console.log('Omise modal closed');
+            }
+          });
+          return false;
+        }else{
+          return true;
+        }
+        // TODO payment
+      })
+    })
     $(document).on('change', '.dd-gift-change', function () {
         var obj = $(this);
         $.post('<?= $giftRememberUrl; ?>', {
