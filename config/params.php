@@ -22,6 +22,4 @@ return [
             2472,
         ],
     ],
-    'omisePublicKey' => 'pkey_630yfmwtfwaob0i9jg6',
-    'omiseSecretKey' => 'skey_6338xkbyjv9z3igxc0d',
 ];
