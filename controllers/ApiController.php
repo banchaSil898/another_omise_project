@@ -95,29 +95,50 @@ class ApiController extends Controller {
                 }
             }
         }
-        // Access Token ของ LINE Notify
-        $lineToken = 'qtSUj8j53ar1SZ0MC2KczBfEYE41tejVCGLxvpnErK0';
+    }
 
-        // ข้อความที่ต้องการส่ง
-        $message = "ชำระผ่าน omise รหัส " . $dataFromOmise->data->id . " เรียบร้อยแล้ว";
+    public function actionOmiseCallback($order_no){
 
-        $url = 'https://notify-api.line.me/api/notify';
-        $headers = [
-            'Authorization: Bearer ' . $lineToken,
-        ];
+        \Omise\Omise::setSecretKey(Yii::$app->params['omiseSecretKey']);
 
-        $data = [
-            'message' => $message,
-        ];
+        $model = Purchase::findOne(['purchase_no' => $order_no]);
+        if(!$model){
+            throw new NotFouondHttpException('ไม่พบคำสั่งซื้อ');
+        }
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $chargeId = Yii::$app->request->get('charge_id');
+        $charge = \Omise\Charge::retrieve($chargeId);
 
-        $response = curl_exec($ch);
-        curl_close($ch);
+        if ($charge['status'] === 'successful') {
+            $model->status = Purchase::STATUS_PAID;
+            $model->save();
+            
+            $omisePayments = new OmisePayments;
+            $omisePayments->order_id = $model->id;
+            $omisePayments->charge_id = $charge['id'];
+            $omisePayments->amount = $charge['amount'];
+            $omisePayments->net = $charge['net'];
+            $omisePayments->fee = $charge['fee'];
+            $omisePayments->fee_vat = $charge['fee_vat'];
+            $omisePayments->currency = $charge['currency'];
+            $omisePayments->status = $charge['status'];
+            $omisePayments->payment_method = 'CREDITCARD';
+            $transaction_date = new \DateTime($charge['paid_at']);
+            $transaction_date->setTimezone(new \DateTimeZone('Asia/Bangkok'));
+            $omisePayments->transaction_date = $transaction_date->format('Y-m-d H:i:s');
+            $created_date = new \DateTime();
+            $created_date->setTimezone(new \DateTimeZone('Asia/Bangkok'));
+            $omisePayments->created_at = $created_date->format('Y-m-d H:i:s');
+            if($omisePayments->save()){
+                $model->payment_info = "ชำระผ่าน omise รหัส " . $charge['id'];
+                $model->save();
+                $this->redirect(['done', 'order_no' => $model->purchase_no]);
+            }
+            $this->redirect(['done', 'order_no' => $order_no]);
+        } else {
+            $model->status = Purchase::STATUS_FAILED;
+            $model->save();
+            return $this->redirect(['done', 'order_no' => $order_no]);
+        }
     }
 }

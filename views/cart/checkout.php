@@ -39,6 +39,7 @@ $user = Yii::$app->user->identity;
     <div class="checkout page">
         <div class="container">
             <div class="row">
+
                 <div class="col-md-5 col-md-push-7">
                     <?=
                     $this->render('part/cart', [
@@ -48,6 +49,7 @@ $user = Yii::$app->user->identity;
                     ?>
                 </div>
                 <div class="col-md-7 col-md-pull-5">
+
                     <?php
                     Page::begin([
                         'title' => 'ขั้นตอนการชำระเงิน',
