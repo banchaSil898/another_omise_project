@@ -108,7 +108,7 @@ $config = [
             'targets' => [
                 [
                     'class' => 'yii\log\FileTarget',
-                    'levels' => ['error', 'warning'],
+                    'levels' => ['error'],
                 ],
                 [
                     'class' => 'yii\log\FileTarget',
@@ -137,6 +137,11 @@ $config = [
                     'route' => 'product/view',
                     'suffix' => '.html',
                 ],
+                [
+                    'pattern' => 'api/complete',
+                    'route' => 'api/complete',
+                    'verb' => ['POST'],
+                ]
             ],
         ],
     ],

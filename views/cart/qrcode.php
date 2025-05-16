@@ -24,7 +24,6 @@ Breadcrumbs::widget([
             'title' => 'QR Code Promptpay',
         ])
         ?>
-        <?= var_dump($get) ?>
         <h2 class="text-center">
             <?= Html::img(Yii::$app->request->get('qr_image'), ['alt' => 'My logo', 'style'=> 'max-width:15em;']) ?>
         </h2>

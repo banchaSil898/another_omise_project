@@ -6,6 +6,9 @@ use Yii;
 use app\models\Purchase;
 use app\models\PurchaseStatus;
 use app\models\OmisePayments;
+use yii\web\NotFoundHttpException;
+use yii\helpers\Url;
+
 require_once Yii::getAlias('@omise/Omise.php');  // เรียกใช้ Omise SDK ที่กำหนดใน aliases
 
 class ApiController extends Controller {
@@ -29,6 +32,7 @@ class ApiController extends Controller {
     public function actionComplete(){
 
         $request = Yii::$app->request;
+
         if ($request->isPost) {
             $dataFromOmise = json_decode(file_get_contents('php://input'));
 
@@ -98,47 +102,58 @@ class ApiController extends Controller {
     }
 
     public function actionOmiseCallback($order_no){
+        // บันทึกข้อมูล GET parameters
+        $getParams = Yii::$app->request->get();
 
-        \Omise\Omise::setSecretKey(Yii::$app->params['omiseSecretKey']);
+        // กำหนดทั้ง PUBLIC_KEY และ SECRET_KEY
+        define('OMISE_PUBLIC_KEY', Yii::$app->params['omisePublicKey']);
+        define('OMISE_SECRET_KEY', Yii::$app->params['omiseSecretKey']);
 
         $model = Purchase::findOne(['purchase_no' => $order_no]);
         if(!$model){
-            throw new NotFouondHttpException('ไม่พบคำสั่งซื้อ');
+            throw new NotFoundHttpException('ไม่พบคำสั่งซื้อ');
         }
 
-        $chargeId = Yii::$app->request->get('charge_id');
-        $charge = \Omise\Charge::retrieve($chargeId);
-
-        if ($charge['status'] === 'successful') {
-            $model->status = Purchase::STATUS_PAID;
-            $model->save();
+        // ค้นหา charge_id จากฐานข้อมูล
+        $omisePayment = OmisePayments::findOne(['order_id' => $model->id]);
+        if ($omisePayment && $omisePayment->charge_id) {
+            $chargeId = $omisePayment->charge_id;
             
-            $omisePayments = new OmisePayments;
-            $omisePayments->order_id = $model->id;
-            $omisePayments->charge_id = $charge['id'];
-            $omisePayments->amount = $charge['amount'];
-            $omisePayments->net = $charge['net'];
-            $omisePayments->fee = $charge['fee'];
-            $omisePayments->fee_vat = $charge['fee_vat'];
-            $omisePayments->currency = $charge['currency'];
-            $omisePayments->status = $charge['status'];
-            $omisePayments->payment_method = 'CREDITCARD';
-            $transaction_date = new \DateTime($charge['paid_at']);
-            $transaction_date->setTimezone(new \DateTimeZone('Asia/Bangkok'));
-            $omisePayments->transaction_date = $transaction_date->format('Y-m-d H:i:s');
-            $created_date = new \DateTime();
-            $created_date->setTimezone(new \DateTimeZone('Asia/Bangkok'));
-            $omisePayments->created_at = $created_date->format('Y-m-d H:i:s');
-            if($omisePayments->save()){
-                $model->payment_info = "ชำระผ่าน omise รหัส " . $charge['id'];
-                $model->save();
-                $this->redirect(['done', 'order_no' => $model->purchase_no]);
+            try {
+                // ขั้นตอนที่ 6: เรียกใช้งาน Charges API เพื่อตรวจสอบสถานะการชำระเงิน
+                $charge = \OmiseCharge::retrieve($chargeId);
+
+                if ($charge['status'] === 'successful') {
+                    // อัพเดทสถานะการสั่งซื้อ
+                    $model->status = Purchase::STATUS_PAID;
+                    $model->payment_info = "ชำระผ่าน Omise รหัส " . $charge['id'];
+                    $model->save();
+                    
+                    // อัพเดทข้อมูลการชำระเงิน
+                    $omisePayment->status = $charge['status'];
+                    if (isset($charge['paid_at'])) {
+                        $transaction_date = new \DateTime($charge['paid_at']);
+                        $transaction_date->setTimezone(new \DateTimeZone('Asia/Bangkok'));
+                        $omisePayment->transaction_date = $transaction_date->format('Y-m-d H:i:s');
+                    }
+                    $omisePayment->save();
+                    
+                    return $this->redirect(['cart/done', 'order_no' => $model->purchase_no]);
+                } else {
+                    // กรณีการชำระไม่สำเร็จ
+                    Yii::error('การชำระเงินไม่สำเร็จ: ' . $charge['status']);
+                    $model->status = Purchase::STATUS_NEW;
+                    $model->save();
+                    return $this->redirect(['cart/error', 'order_no' => $order_no]);
+                }
+            } catch (\Exception $e) {
+                Yii::error('เกิดข้อผิดพลาดในการตรวจสอบ charge: ' . $e->getMessage());
+                return $this->redirect(['site/error']);
             }
-            $this->redirect(['done', 'order_no' => $order_no]);
         } else {
-            $model->status = Purchase::STATUS_FAILED;
-            $model->save();
-            return $this->redirect(['done', 'order_no' => $order_no]);
+            // ไม่พบ charge_id ในฐานข้อมูล
+            Yii::error('ไม่พบ charge_id ในฐานข้อมูลสำหรับคำสั่งซื้อ: ' . $order_no);
+            return $this->redirect(['site/error']);
         }
     }
 }
